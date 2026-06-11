@@ -14,7 +14,7 @@
         input { background: #1a1a3a; color: white; border: 1px solid #3a6ea5; text-align: center; }
         #lobbiesList { width: 80%; max-width: 600px; height: 300px; overflow-y: auto; background: #1a1a3a; border-radius: 10px; padding: 10px; }
         .lobby-item { display: flex; justify-content: space-between; align-items: center; padding: 10px; margin: 5px 0; background: #2a2a4a; border-radius: 5px; }
-        #gameUI { position: fixed; top: 20px; right: 20px; background: rgba(0,0,0,0.85); padding: 15px; border-radius: 10px; z-index: 20; min-width: 200px; text-align: center; backdrop-filter: blur(5px); border: 1px solid #3a6ea5; }
+        #gameUI { position: fixed; top: 20px; right: 20px; background: rgba(0,0,0,0.85); padding: 15px; border-radius: 10px; z-index: 20; min-width: 220px; text-align: center; backdrop-filter: blur(5px); border: 1px solid #3a6ea5; }
         #gameCanvas { display: block; width: 100%; height: 100vh; background: black; cursor: crosshair; }
         #roleDisplay { font-size: 18px; font-weight: bold; margin-bottom: 10px; }
         #killBtn { margin-top: 10px; background: #aa2222; width: 100%; }
@@ -24,29 +24,9 @@
         #reportBtn { margin-top: 10px; background: #ffaa00; color: black; width: 100%; }
         #reportBtn:hover { background: #ffcc44; }
         #chatBtn { margin-top: 10px; background: #3a6ea5; width: 100%; }
-        
-        /* Пинг снизу по центру */
-        .ping-container {
-            position: fixed;
-            bottom: 20px;
-            left: 0;
-            right: 0;
-            text-align: center;
-            z-index: 100;
-            pointer-events: none;
-        }
-        .ping-display {
-            display: inline-block;
-            background: rgba(0,0,0,0.7);
-            backdrop-filter: blur(5px);
-            padding: 6px 14px;
-            border-radius: 20px;
-            font-size: 14px;
-            font-family: monospace;
-            font-weight: bold;
-            border: 1px solid rgba(255,255,255,0.2);
-            pointer-events: auto;
-        }
+        #colorBtn { margin-top: 10px; background: #6a3ea5; width: 100%; }
+        #colorBtn:hover { background: #5a2e95; }
+        .color-indicator { font-size: 12px; margin-top: 5px; }
         
         .chat-window {
             position: fixed;
@@ -125,14 +105,12 @@
     <canvas id="gameCanvas"></canvas>
     <div id="gameUI">
         <div id="roleDisplay"></div>
+        <div id="colorIndicator" class="color-indicator"></div>
         <button id="startGameBtn" class="hidden">🎮 Старт игры</button>
         <button id="killBtn" class="hidden">🔪 Убить</button>
         <button id="reportBtn" class="hidden">⚠️ Репорт (труп)</button>
+        <button id="colorBtn">🎨 Сменить цвет</button>
         <button id="chatBtn">💬 Чат</button>
-    </div>
-    <!-- Пинг снизу по центру -->
-    <div class="ping-container">
-        <div id="pingDisplay" class="ping-display">📡 Пинг: -- ms</div>
     </div>
 </div>
 
@@ -161,9 +139,11 @@
     let ws = null;
     let currentLobbyId = null;
     let myName = "";
+    let myColor = "blue";
     let isImpostor = false;
     let gameStarted = false;
     let isHost = false;
+    let isAlive = true;
     let players = new Map();
     let walls = [];
     let currentMapType = null;
@@ -172,20 +152,40 @@
     let meetingActive = false;
     let meetingTimer = null;
     let hasVoted = false;
+    let showHitboxes = false;
     
     let player = { x: 499, y: 353, w: 32, h: 32, speed: 2.5, dir: 'right' };
     
-    const playerSpriteLeft = new Image();
-    const playerSpriteRight = new Image();
-    const deadSprite = new Image();
-    playerSpriteLeft.src = '/playerleft.png';
-    playerSpriteRight.src = '/playerright.png';
-    deadSprite.src = '/dead.png';
+    // Спрайты для голубого (по умолчанию)
+    const blueSpriteLeft = new Image();
+    const blueSpriteRight = new Image();
+    blueSpriteLeft.src = '/playerleft.png';
+    blueSpriteRight.src = '/playerright.png';
+    
+    // Спрайты для красного
+    const redSpriteLeft = new Image();
+    const redSpriteRight = new Image();
+    redSpriteLeft.src = '/redplayerleft.png';
+    redSpriteRight.src = '/redplayerright.png';
+    
+    // Трупы
+    const deadSpriteBlue = new Image();
+    const deadSpriteRed = new Image();
+    deadSpriteBlue.src = '/dead.png';
+    deadSpriteRed.src = '/reddead.png';
     
     const stepSound = new Audio('/step.ogg');
     stepSound.volume = 0.3;
     let lastStepTime = 0;
     let lastStepX = 0, lastStepY = 0;
+    
+    // Отладка хитбоксов по клавише H
+    window.addEventListener('keydown', (e) => {
+        if (e.key === 'h' || e.key === 'H') {
+            showHitboxes = !showHitboxes;
+            console.log(`🔍 Хитбоксы ${showHitboxes ? 'показаны' : 'скрыты'}`);
+        }
+    });
     
     const menuScreen = document.getElementById('menuScreen');
     const lobbiesScreen = document.getElementById('lobbiesScreen');
@@ -194,6 +194,8 @@
     const startGameBtn = document.getElementById('startGameBtn');
     const killBtn = document.getElementById('killBtn');
     const reportBtn = document.getElementById('reportBtn');
+    const colorBtn = document.getElementById('colorBtn');
+    const colorIndicator = document.getElementById('colorIndicator');
     const roleDisplay = document.getElementById('roleDisplay');
     const chatBtn = document.getElementById('chatBtn');
     const chatWindow = document.getElementById('chatWindow');
@@ -203,7 +205,6 @@
     const meetingTimerDiv = document.getElementById('meetingTimer');
     const meetingVoteButtons = document.getElementById('meetingVoteButtons');
     const meetingStatus = document.getElementById('meetingStatus');
-    const pingDisplay = document.getElementById('pingDisplay');
     
     document.getElementById('playBtn').onclick = () => {
         myName = document.getElementById('playerName').value.trim();
@@ -217,8 +218,21 @@
     document.getElementById('refreshLobbiesBtn').onclick = () => refreshLobbies();
     document.getElementById('backToMenuBtn').onclick = () => { if(ws) ws.close(); lobbiesScreen.classList.add('hidden'); menuScreen.classList.remove('hidden'); };
     startGameBtn.onclick = () => { if(isHost && !gameStarted) ws.send(JSON.stringify({type:'start_game'})); };
-    killBtn.onclick = () => { if(gameStarted && isImpostor && !meetingActive) ws.send(JSON.stringify({type:'kill'})); };
-    reportBtn.onclick = () => { if(gameStarted && !meetingActive) checkAndReport(); };
+    killBtn.onclick = () => { if(gameStarted && isImpostor && !meetingActive && isAlive) ws.send(JSON.stringify({type:'kill'})); };
+    reportBtn.onclick = () => { if(gameStarted && !meetingActive && isAlive) checkAndReport(); };
+    
+    colorBtn.onclick = () => {
+        if (gameStarted) {
+            alert('Нельзя сменить цвет во время игры!');
+            return;
+        }
+        const newColor = myColor === 'blue' ? 'red' : 'blue';
+        myColor = newColor;
+        colorIndicator.textContent = `🎨 Цвет: ${myColor === 'blue' ? 'Голубой' : 'Красный'}`;
+        if (ws) {
+            ws.send(JSON.stringify({ type: 'change_color', color: myColor }));
+        }
+    };
     
     window.closeChat = function() { chatWindow.style.display = 'none'; };
     chatBtn.onclick = () => { 
@@ -227,12 +241,15 @@
         }
     };
     
-    function updatePingDisplay(ping) {
-        if (!pingDisplay) return;
-        pingDisplay.textContent = `📡 Пинг: ${ping} ms`;
-        if (ping < 100) pingDisplay.style.color = '#66ff66';
-        else if (ping < 200) pingDisplay.style.color = '#ffaa00';
-        else pingDisplay.style.color = '#ff6666';
+    function getPlayerSprite(color, dir) {
+        if (color === 'red') {
+            return dir === 'left' ? redSpriteLeft : redSpriteRight;
+        }
+        return dir === 'left' ? blueSpriteLeft : blueSpriteRight;
+    }
+    
+    function getDeadSprite(color) {
+        return color === 'red' ? deadSpriteRed : deadSpriteBlue;
     }
     
     function addChatMessage(sender, message, isSystem = false) {
@@ -241,19 +258,10 @@
         if (isSystem) {
             div.innerHTML = `<span class="system-message">📢 ${message}</span>`;
         } else {
-            div.innerHTML = `<span class="chat-sender">${escapeHtml(sender)}:</span><span class="chat-text"> ${escapeHtml(message)}</span>`;
+            div.innerHTML = `<span class="chat-sender">${sender}:</span><span class="chat-text"> ${message}</span>`;
         }
         chatMessagesDiv.appendChild(div);
         chatMessagesDiv.scrollTop = chatMessagesDiv.scrollHeight;
-    }
-    
-    function escapeHtml(str) {
-        return str.replace(/[&<>]/g, function(m) {
-            if (m === '&') return '&amp;';
-            if (m === '<') return '&lt;';
-            if (m === '>') return '&gt;';
-            return m;
-        });
     }
     
     document.getElementById('sendChatBtn').onclick = () => {
@@ -292,7 +300,7 @@
                     if (!hasVoted) {
                         ws.send(JSON.stringify({ type: 'vote', target: name }));
                         hasVoted = true;
-                        meetingStatus.textContent = `Вы проголосовали за ${escapeHtml(name)}. Ожидание остальных...`;
+                        meetingStatus.textContent = `Вы проголосовали за ${name}. Ожидание остальных...`;
                         btn.disabled = true;
                         btn.style.opacity = '0.5';
                     }
@@ -366,15 +374,7 @@
     function connectWebSocket() {
         return new Promise((resolve) => {
             ws = new WebSocket(`wss://${window.location.hostname}`);
-            ws.onopen = () => {
-                console.log('Connected');
-                setInterval(() => {
-                    if (ws.readyState === WebSocket.OPEN) {
-                        ws.send(JSON.stringify({ type: 'ping', timestamp: Date.now() }));
-                    }
-                }, 2000);
-                resolve();
-            };
+            ws.onopen = () => { console.log('Connected'); resolve(); };
             ws.onmessage = (event) => { handleMessage(JSON.parse(event.data)); };
             ws.onclose = () => { console.log('Disconnected'); if(gameStarted) alert('Соединение потеряно'); };
         });
@@ -382,6 +382,7 @@
     
     function playStepSound(x, y) {
         if (meetingActive) return;
+        if (!isAlive) return;
         const now = Date.now();
         const dx = Math.abs(x - lastStepX);
         const dy = Math.abs(y - lastStepY);
@@ -398,11 +399,16 @@
         gameStarted = false;
         meetingActive = false;
         isImpostor = false;
+        isAlive = true;
         currentMapType = 'skeld';
         
         players.clear();
         data.players.forEach(p => {
-            players.set(p.name, { x: p.x, y: p.y, isImpostor: false, alive: true, dir: 'right', bodyX: null, bodyY: null });
+            players.set(p.name, { x: p.x, y: p.y, isImpostor: false, alive: true, dir: p.dir || 'right', bodyX: null, bodyY: null, color: p.color || 'blue' });
+            if (p.name === myName && p.color) {
+                myColor = p.color;
+                colorIndicator.textContent = `🎨 Цвет: ${myColor === 'blue' ? 'Голубой' : 'Красный'}`;
+            }
         });
         
         player.x = 499;
@@ -426,11 +432,6 @@
     function handleMessage(data) {
         console.log('Получено:', data.type);
         
-        if (data.type === 'pong') {
-            const ping = Date.now() - data.timestamp;
-            updatePingDisplay(ping);
-        }
-        
         if(data.type === 'lobbies_list') {
             lobbiesList.innerHTML = '';
             if(!data.lobbies || data.lobbies.length === 0) {
@@ -439,7 +440,7 @@
                 data.lobbies.forEach(lobby => {
                     const div = document.createElement('div'); 
                     div.className = 'lobby-item';
-                    div.innerHTML = `<span>🏠 Лобби ${escapeHtml(lobby.id)} (${lobby.playersCount}/10) — Хост: ${escapeHtml(lobby.host)}</span><button onclick="joinLobby('${lobby.id}')">🔗 Присоединиться</button>`;
+                    div.innerHTML = `<span>🏠 Лобби ${lobby.id} (${lobby.playersCount}/10) — Хост: ${lobby.host}</span><button onclick="joinLobby('${lobby.id}')">🔗 Присоединиться</button>`;
                     lobbiesList.appendChild(div);
                 });
             }
@@ -450,6 +451,7 @@
             isHost = data.isHost; 
             currentMapType = data.mapType; 
             gameStarted = false;
+            isAlive = true;
             lobbiesScreen.classList.add('hidden'); 
             gameScreen.classList.remove('hidden');
             
@@ -460,12 +462,19 @@
             reportBtn.classList.add('hidden');
             roleDisplay.textContent = '📡 ЛОББИ';
             roleDisplay.style.color = '#ffaa00';
+            colorIndicator.textContent = `🎨 Цвет: ${myColor === 'blue' ? 'Голубой' : 'Красный'}`;
             loadMap(currentMapType, true);
         }
         
         if(data.type === 'lobby_update') {
             players.clear();
-            data.players.forEach(p => { players.set(p.name, { x: p.x, y: p.y, isImpostor: false, alive: true, dir: 'right', bodyX: null, bodyY: null }); });
+            data.players.forEach(p => { 
+                players.set(p.name, { x: p.x, y: p.y, isImpostor: false, alive: p.alive, dir: p.dir || 'right', bodyX: null, bodyY: null, color: p.color || 'blue' });
+                if (p.name === myName && p.color) {
+                    myColor = p.color;
+                    colorIndicator.textContent = `🎨 Цвет: ${myColor === 'blue' ? 'Голубой' : 'Красный'}`;
+                }
+            });
             if (data.isHost !== undefined) {
                 isHost = data.isHost;
                 startGameBtn.classList.toggle('hidden', !isHost);
@@ -489,6 +498,11 @@
         
         if(data.type === 'player_ejected') {
             alert(`${data.name} был кикнут голосованием!`);
+            if (data.name === myName) {
+                isAlive = false;
+                roleDisplay.textContent = '💀 ВЫ УБИТЫ 💀';
+                roleDisplay.style.color = '#888';
+            }
         }
         
         if(data.type === 'vote_update') {
@@ -502,12 +516,17 @@
         if(data.type === 'game_start') {
             gameStarted = true; 
             isImpostor = data.isImpostor;
+            isAlive = true;
             
             player.speed = data.speed || 2.5;
             
             players.clear();
             data.players.forEach(p => { 
-                players.set(p.name, { x: p.x, y: p.y, isImpostor: p.isImpostor, alive: true, dir: p.dir || 'right', bodyX: null, bodyY: null }); 
+                players.set(p.name, { x: p.x, y: p.y, isImpostor: p.isImpostor, alive: p.alive, dir: p.dir || 'right', bodyX: null, bodyY: null, color: p.color || 'blue' });
+                if (p.name === myName && p.color) {
+                    myColor = p.color;
+                    colorIndicator.textContent = `🎨 Цвет: ${myColor === 'blue' ? 'Голубой' : 'Красный'}`;
+                }
             });
             player.x = 2280;
             player.y = 547;
@@ -530,22 +549,26 @@
                     playerData.y = p.y; 
                     playerData.alive = p.alive;
                     playerData.dir = p.dir || 'right';
+                    playerData.color = p.color || playerData.color || 'blue';
                     if (!p.alive && !playerData.bodyX) {
                         playerData.bodyX = p.x;
                         playerData.bodyY = p.y;
                     }
-                } 
+                }
+                if (p.name === myName) {
+                    isAlive = p.alive;
+                    if (!isAlive) {
+                        roleDisplay.textContent = '💀 ВЫ УБИТЫ 💀';
+                        roleDisplay.style.color = '#888';
+                        killBtn.classList.add('hidden');
+                        reportBtn.classList.add('hidden');
+                    }
+                }
             });
         }
         
         if(data.type === 'player_killed') {
-            if(players.has(data.name)) {
-                const killed = players.get(data.name);
-                killed.alive = false;
-                killed.bodyX = killed.x;
-                killed.bodyY = killed.y;
-            }
-            alert(`💀 ${data.name} был убит!`);
+            // Нет сообщения об убийстве
         }
         
         if(data.type === 'game_over') {
@@ -578,7 +601,7 @@
             tempCtx.drawImage(mapWithColor, 0, 0);
             try {
                 const imageData = tempCtx.getImageData(0,0,mapWidth,mapHeight);
-                walls = generateWallsFromColor(imageData, 18, 0, 38, 20);
+                walls = generateWallsFromColor(imageData, 18, 0, 38, 255, 20);
                 console.log(`✅ ${walls.length} хитбоксов для ${isLobby ? 'лобби' : 'карты'}`);
             } catch(e) { console.error(e); walls = []; }
             
@@ -644,7 +667,7 @@
         
         let lastSendX = player.x, lastSendY = player.y, lastSendDir = player.dir;
         setInterval(() => {
-            if(ws && ws.readyState === WebSocket.OPEN && !meetingActive) {
+            if(ws && ws.readyState === WebSocket.OPEN && !meetingActive && isAlive) {
                 if(Math.abs(player.x - lastSendX) > 3 || Math.abs(player.y - lastSendY) > 3 || player.dir !== lastSendDir) {
                     ws.send(JSON.stringify({type:'update_position', x:player.x, y:player.y, dir:player.dir}));
                     lastSendX = player.x; 
@@ -657,6 +680,7 @@
         const keys = {};
         window.addEventListener('keydown', (e) => { 
             if (meetingActive) return;
+            if (!isAlive) return;
             keys[e.code] = true; 
             e.preventDefault(); 
             if(keys['ArrowLeft']) player.dir = 'left'; 
@@ -673,10 +697,12 @@
             
             let nx = player.x, ny = player.y;
             let moved = false;
-            if(keys['ArrowLeft']) { nx -= player.speed; moved = true; player.dir = 'left'; }
-            if(keys['ArrowRight']) { nx += player.speed; moved = true; player.dir = 'right'; }
-            if(keys['ArrowUp']) { ny -= player.speed; moved = true; }
-            if(keys['ArrowDown']) { ny += player.speed; moved = true; }
+            if (isAlive) {
+                if(keys['ArrowLeft']) { nx -= player.speed; moved = true; player.dir = 'left'; }
+                if(keys['ArrowRight']) { nx += player.speed; moved = true; player.dir = 'right'; }
+                if(keys['ArrowUp']) { ny -= player.speed; moved = true; }
+                if(keys['ArrowDown']) { ny += player.speed; moved = true; }
+            }
             
             if (moved) playStepSound(nx, ny);
             
@@ -689,16 +715,30 @@
         }
         
         function draw(ctx) {
+            const ZOOM = 2.0;
+            
             ctx.clearRect(0,0,canvas.width,canvas.height);
             ctx.save();
-            const camX = canvas.width/2 - player.x - player.w/2;
-            const camY = canvas.height/2 - player.y - player.h/2;
+            
+            const camX = canvas.width/2 - (player.x + player.w/2) * ZOOM;
+            const camY = canvas.height/2 - (player.y + player.h/2) * ZOOM;
             ctx.translate(camX, camY);
+            ctx.scale(ZOOM, ZOOM);
             
             if(mapToDraw) ctx.drawImage(mapToDraw, 0, 0);
             
+            // ОТЛАДКА: показываем хитбоксы если включено
+            if (showHitboxes) {
+                ctx.fillStyle = 'rgba(255, 0, 0, 0.3)';
+                for (let wall of walls) {
+                    ctx.fillRect(wall.x, wall.y, wall.w, wall.h);
+                }
+            }
+            
+            // Трупы (с учётом цвета убитого)
             for(let [name, p] of players.entries()) {
                 if (!p.alive && p.bodyX && p.bodyY) {
+                    const deadSprite = getDeadSprite(p.color || 'blue');
                     if (deadSprite.complete && deadSprite.naturalWidth > 0) {
                         ctx.drawImage(deadSprite, p.bodyX, p.bodyY, player.w, player.h);
                     } else {
@@ -711,10 +751,11 @@
                 }
             }
             
+            // Живые игроки
             for(let [name, p] of players.entries()) {
                 if(name !== myName && p.alive) {
-                    const sprite = (p.dir === 'left') ? playerSpriteLeft : playerSpriteRight;
-                    if(sprite.complete && sprite.naturalWidth > 0) {
+                    const sprite = getPlayerSprite(p.color || 'blue', p.dir);
+                    if (sprite.complete && sprite.naturalWidth > 0) {
                         ctx.drawImage(sprite, p.x, p.y, player.w, player.h);
                     } else {
                         ctx.fillStyle = p.isImpostor ? '#aa0000' : '#44aa44';
@@ -722,20 +763,23 @@
                     }
                     ctx.fillStyle = 'white';
                     ctx.font = '12px Arial';
-                    ctx.fillText(escapeHtml(name), p.x, p.y-5);
+                    ctx.fillText(name, p.x, p.y-5);
                 }
             }
             
-            const mySprite = (player.dir === 'left') ? playerSpriteLeft : playerSpriteRight;
-            if(mySprite.complete && mySprite.naturalWidth > 0) {
-                ctx.drawImage(mySprite, player.x, player.y, player.w, player.h);
-            } else {
-                ctx.fillStyle = isImpostor ? '#ff4444' : '#ff8888';
-                ctx.fillRect(player.x, player.y, player.w, player.h);
+            // Свой игрок
+            if (isAlive) {
+                const mySprite = getPlayerSprite(myColor, player.dir);
+                if (mySprite.complete && mySprite.naturalWidth > 0) {
+                    ctx.drawImage(mySprite, player.x, player.y, player.w, player.h);
+                } else {
+                    ctx.fillStyle = isImpostor ? '#ff4444' : '#ff8888';
+                    ctx.fillRect(player.x, player.y, player.w, player.h);
+                }
+                ctx.fillStyle = 'white';
+                ctx.font = '12px Arial';
+                ctx.fillText(myName, player.x, player.y-5);
             }
-            ctx.fillStyle = 'white';
-            ctx.font = '12px Arial';
-            ctx.fillText(escapeHtml(myName), player.x, player.y-5);
             
             ctx.restore();
         }
