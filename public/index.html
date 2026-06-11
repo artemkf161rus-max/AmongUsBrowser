@@ -27,7 +27,6 @@
         #colorBtn { margin-top: 10px; background: #6a3ea5; width: 100%; }
         #colorBtn:hover { background: #5a2e95; }
         .color-indicator { font-size: 12px; margin-top: 5px; }
-        #pingDisplay { font-size: 12px; margin-top: 8px; padding-top: 5px; border-top: 1px solid rgba(255,255,255,0.2); font-family: monospace; }
         
         .chat-window {
             position: fixed;
@@ -107,7 +106,6 @@
     <div id="gameUI">
         <div id="roleDisplay"></div>
         <div id="colorIndicator" class="color-indicator"></div>
-        <div id="pingDisplay">📡 Пинг: -- ms</div>
         <button id="startGameBtn" class="hidden">🎮 Старт игры</button>
         <button id="killBtn" class="hidden">🔪 Убить</button>
         <button id="reportBtn" class="hidden">⚠️ Репорт (труп)</button>
@@ -207,7 +205,6 @@
     const meetingTimerDiv = document.getElementById('meetingTimer');
     const meetingVoteButtons = document.getElementById('meetingVoteButtons');
     const meetingStatus = document.getElementById('meetingStatus');
-    const pingDisplay = document.getElementById('pingDisplay');
     
     document.getElementById('playBtn').onclick = () => {
         myName = document.getElementById('playerName').value.trim();
@@ -243,14 +240,6 @@
             chatWindow.style.display = chatWindow.style.display === 'none' ? 'flex' : 'none'; 
         }
     };
-    
-    function updatePingDisplay(ping) {
-        if (!pingDisplay) return;
-        pingDisplay.textContent = `📡 Пинг: ${ping} ms`;
-        if (ping < 100) pingDisplay.style.color = '#66ff66';
-        else if (ping < 200) pingDisplay.style.color = '#ffaa00';
-        else pingDisplay.style.color = '#ff6666';
-    }
     
     function getPlayerSprite(color, dir) {
         if (color === 'red') {
@@ -384,16 +373,8 @@
     
     function connectWebSocket() {
         return new Promise((resolve) => {
-            ws = new WebSocket(`ws://${window.location.hostname}:3000`);
-            ws.onopen = () => {
-                console.log('Connected');
-                setInterval(() => {
-                    if (ws.readyState === WebSocket.OPEN) {
-                        ws.send(JSON.stringify({ type: 'ping', timestamp: Date.now() }));
-                    }
-                }, 2000);
-                resolve();
-            };
+            ws = new WebSocket(`wss://${window.location.hostname}`);
+            ws.onopen = () => { console.log('Connected'); resolve(); };
             ws.onmessage = (event) => { handleMessage(JSON.parse(event.data)); };
             ws.onclose = () => { console.log('Disconnected'); if(gameStarted) alert('Соединение потеряно'); };
         });
@@ -450,11 +431,6 @@
     
     function handleMessage(data) {
         console.log('Получено:', data.type);
-        
-        if (data.type === 'pong') {
-            const ping = Date.now() - data.timestamp;
-            updatePingDisplay(ping);
-        }
         
         if(data.type === 'lobbies_list') {
             lobbiesList.innerHTML = '';
