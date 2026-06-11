@@ -500,6 +500,8 @@ wss.on('connection', (ws) => {
 });
 
 const PORT = process.env.PORT || 3000;
+
+server.listen(PORT, '0.0.0.0', () => {
     console.log(`🚀 Сервер запущен на всех интерфейсах`);
     console.log(`📍 Radmin IP: 26.167.126.232:${PORT}`);
     console.log(`📍 Локально: http://localhost:${PORT}`);
