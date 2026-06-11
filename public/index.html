@@ -373,7 +373,7 @@
     
     function connectWebSocket() {
         return new Promise((resolve) => {
-            ws = new WebSocket(`ws://${window.location.hostname}:3000`);
+            ws = new WebSocket(`wss://${window.location.hostname}`);
             ws.onopen = () => { console.log('Connected'); resolve(); };
             ws.onmessage = (event) => { handleMessage(JSON.parse(event.data)); };
             ws.onclose = () => { console.log('Disconnected'); if(gameStarted) alert('Соединение потеряно'); };
