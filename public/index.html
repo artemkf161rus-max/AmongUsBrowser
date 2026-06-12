@@ -90,7 +90,10 @@
 
 <div id="menuScreen" class="screen">
     <h1>🚀 Among Us</h1>
-    <input type="text" id="playerName" placeholder="Введите имя" maxlength="20">
+    <div style="display: flex; gap: 10px;">
+        <input type="text" id="playerName" placeholder="Введите имя" maxlength="20" style="flex: 1;">
+        <button id="randomNameBtn" style="width: auto; padding: 12px 20px;">🎲</button>
+    </div>
     <button id="playBtn">🔫 Играть</button>
 </div>
 
@@ -206,6 +209,26 @@
     const meetingTimerDiv = document.getElementById('meetingTimer');
     const meetingVoteButtons = document.getElementById('meetingVoteButtons');
     const meetingStatus = document.getElementById('meetingStatus');
+    
+    let namesList = [];
+
+    // Загружаем имена из nicks.txt
+    fetch('/nicks.txt')
+        .then(response => response.text())
+        .then(text => {
+            namesList = text.split(/\r?\n/).filter(name => name.trim().length > 0);
+            console.log(`✅ Загружено ${namesList.length} имён`);
+        })
+        .catch(err => console.error('❌ Ошибка загрузки nicks.txt:', err));
+
+    document.getElementById('randomNameBtn').onclick = () => {
+        if (namesList.length === 0) {
+            alert('Список имён ещё не загрузился, попробуй через секунду');
+            return;
+        }
+        const randomIndex = Math.floor(Math.random() * namesList.length);
+        document.getElementById('playerName').value = namesList[randomIndex];
+    };
     
     document.getElementById('playBtn').onclick = () => {
         myName = document.getElementById('playerName').value.trim();
